@@ -1,17 +1,18 @@
 package repository
 
 import (
+	"context"
 	"sync"
 
 	"github.com/MOMON8798/Event-Driven.git/internal/domain"
 )
 
 type Repository interface {
-	GetOrderByID(id string) (*domain.Order, error)
-	CreateOrder(order *domain.Order) error
-	UpdateOrder(order *domain.Order) error
-	DeleteOrder(id string) error
-	GetAllOrders() ([]*domain.Order, error)
+	GetOrderByID(ctx context.Context, id string) (*domain.Order, error)
+	CreateOrder(ctx context.Context, order *domain.Order) error
+	UpdateOrder(ctx context.Context, order *domain.Order) error
+	DeleteOrder(ctx context.Context, id string) error
+	GetAllOrders(ctx context.Context) ([]*domain.Order, error)
 }
 
 type inMemoryRepository struct {
@@ -22,11 +23,10 @@ type inMemoryRepository struct {
 func NewInMemoryRepository() Repository {
 	return &inMemoryRepository{
 		orders: make(map[string]*domain.Order),
-		mu:     sync.RWMutex{},
 	}
 }
 
-func (r *inMemoryRepository) GetOrderByID(id string) (*domain.Order, error) {
+func (r *inMemoryRepository) GetOrderByID(ctx context.Context, id string) (*domain.Order, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	order, exists := r.orders[id]
@@ -36,14 +36,14 @@ func (r *inMemoryRepository) GetOrderByID(id string) (*domain.Order, error) {
 	return order, nil
 }
 
-func (r *inMemoryRepository) CreateOrder(order *domain.Order) error {
+func (r *inMemoryRepository) CreateOrder(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.orders[order.ID] = order
 	return nil
 }
 
-func (r *inMemoryRepository) UpdateOrder(order *domain.Order) error {
+func (r *inMemoryRepository) UpdateOrder(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.orders[order.ID]; !exists {
@@ -53,7 +53,7 @@ func (r *inMemoryRepository) UpdateOrder(order *domain.Order) error {
 	return nil
 }
 
-func (r *inMemoryRepository) DeleteOrder(id string) error {
+func (r *inMemoryRepository) DeleteOrder(ctx context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.orders[id]; !exists {
@@ -63,7 +63,7 @@ func (r *inMemoryRepository) DeleteOrder(id string) error {
 	return nil
 }
 
-func (r *inMemoryRepository) GetAllOrders() ([]*domain.Order, error) {
+func (r *inMemoryRepository) GetAllOrders(ctx context.Context) ([]*domain.Order, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	orders := make([]*domain.Order, 0, len(r.orders))

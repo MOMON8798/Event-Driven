@@ -25,3 +25,11 @@ type Order struct {
 }
 
 var ErrOrderNotFound = errors.New("order not found")
+
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusCreated, StatusPaid, StatusShipped, StatusDelivered, StatusCancelled:
+		return true
+	}
+	return false
+}

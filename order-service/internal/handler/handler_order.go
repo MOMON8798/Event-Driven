@@ -1,12 +1,17 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/MOMON8798/Event-Driven.git/internal/domain"
 	"github.com/MOMON8798/Event-Driven.git/internal/service"
 	"github.com/gin-gonic/gin"
 )
+
+const requestTimeout = 3 * time.Second
 
 type Handler struct {
 	service service.OrderService
@@ -15,7 +20,7 @@ type Handler struct {
 type createOrderRequest struct {
 	ClientID string  `json:"client_id" binding:"required"`
 	Name     string  `json:"name" binding:"required"`
-	Total    float64 `json:"total" binding:"required"`
+	Total    float64 `json:"total" binding:"required,gt=0"`
 }
 
 type updateOrderRequest struct {
@@ -37,11 +42,23 @@ func (handler *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	orderGroup.GET("/", handler.GetAllOrders)
 }
 
+func requestContext(ctx *gin.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx.Request.Context(), requestTimeout)
+}
+
 func (handler *Handler) GetOrderByID(ctx *gin.Context) {
-	UserID := ctx.Param("id")
-	order, err := handler.service.GetOrderByID(UserID)
+	orderID := ctx.Param("id")
+
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	order, err := handler.service.GetOrderByID(reqCtx, orderID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
 		return
 	}
 	ctx.JSON(http.StatusOK, order)
@@ -53,7 +70,11 @@ func (handler *Handler) CreateOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	order, err := handler.service.CreateOrder(request.ClientID, request.Name, request.Total)
+
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	order, err := handler.service.CreateOrder(reqCtx, request.ClientID, request.Name, request.Total)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
 		return
@@ -62,26 +83,41 @@ func (handler *Handler) CreateOrder(ctx *gin.Context) {
 }
 
 func (handler *Handler) UpdateOrder(ctx *gin.Context) {
-	ID := ctx.Param("id")
+	orderID := ctx.Param("id")
 	var request updateOrderRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	existingOrder, err := handler.service.GetOrderByID(ID)
+
+	status := domain.Status(request.Status)
+	if !status.IsValid() {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		return
+	}
+
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	existingOrder, err := handler.service.GetOrderByID(reqCtx, orderID)
 	if err != nil {
-		if err == domain.ErrOrderNotFound {
+		if errors.Is(err, domain.ErrOrderNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
 		return
 	}
+
 	existingOrder.Name = request.Name
 	existingOrder.Total = request.Total
 	existingOrder.Status = domain.Status(request.Status)
 
-	if err := handler.service.UpdateOrder(existingOrder); err != nil {
+	if err := handler.service.UpdateOrder(reqCtx, existingOrder); err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
 		return
 	}
@@ -89,9 +125,13 @@ func (handler *Handler) UpdateOrder(ctx *gin.Context) {
 }
 
 func (handler *Handler) DeleteOrder(ctx *gin.Context) {
-	ID := ctx.Param("id")
-	if err := handler.service.DeleteOrder(ID); err != nil {
-		if err == domain.ErrOrderNotFound {
+	orderID := ctx.Param("id")
+
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	if err := handler.service.DeleteOrder(reqCtx, orderID); err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 			return
 		}
@@ -102,7 +142,10 @@ func (handler *Handler) DeleteOrder(ctx *gin.Context) {
 }
 
 func (handler *Handler) GetAllOrders(ctx *gin.Context) {
-	orders, err := handler.service.GetAllOrders()
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	orders, err := handler.service.GetAllOrders(reqCtx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve orders"})
 		return
