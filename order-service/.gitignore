@@ -1,7 +1,0 @@
-# .gitignore
-*.exe
-*.log
-.env
-/tmp/
-bin/
-try.go

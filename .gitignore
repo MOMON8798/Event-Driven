@@ -1,0 +1,12 @@
+.env
+
+*.exe
+*.exe~
+/bin/
+/dist/
+
+*.test
+coverage.out
+coverage.html
+
+*.log

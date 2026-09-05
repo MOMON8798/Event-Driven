@@ -1,0 +1,38 @@
+services:
+  order-postgres:
+    image: postgres:16-alpine
+    container_name: order-postgres
+    environment:
+      POSTGRES_USER: ${ORDER_DB_USER}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
+      POSTGRES_DB: ${ORDER_DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - order_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER} -d ${ORDER_DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  payment-postgres:
+    image: postgres:16-alpine
+    container_name: payment-postgres
+    environment:
+      POSTGRES_USER: ${PAYMENT_DB_USER}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
+      POSTGRES_DB: ${PAYMENT_DB_NAME}
+    ports:
+      - "5433:5432"
+    volumes:
+      - payment_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  order_pgdata:
+  payment_pgdata:
