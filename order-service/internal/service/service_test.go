@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/MOMON8798/Event-Driven.git/internal/domain"
@@ -11,9 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type fakePaymentClient struct {
+	result *service.PaymentResult
+	err    error
+}
+
+func (f *fakePaymentClient) CreatePayment(ctx context.Context, orderID string, amount float64) (*service.PaymentResult, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.result, nil
+}
+
 func newTestService() service.OrderService {
 	repo := repository.NewInMemoryRepository()
-	return service.NewOrderService(repo)
+	fakeClient := &fakePaymentClient{result: &service.PaymentResult{ID: "fake-payment-id", Status: "succeeded"}}
+	return service.NewOrderService(repo, fakeClient)
 }
 
 func TestCreateOrder_SetsDefaults(t *testing.T) {
@@ -142,4 +156,70 @@ func TestGetAllOrders_EmptyByDefault(t *testing.T) {
 	all, err := svc.GetAllOrders(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, all, "a fresh repository should return an empty list, not a nil error")
+}
+
+func TestPayOrder_SucceededPaymentUpdatesStatus(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	fakeClient := &fakePaymentClient{result: &service.PaymentResult{ID: "pay-1", Status: "succeeded"}}
+	svc := service.NewOrderService(repo, fakeClient)
+	ctx := context.Background()
+
+	order, err := svc.CreateOrder(ctx, "client-1", "Товар", 100)
+	require.NoError(t, err)
+
+	paid, err := svc.PayOrder(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusPaid, paid.Status)
+}
+
+func TestPayOrder_FailedPaymentKeepsOrderCreated(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	fakeClient := &fakePaymentClient{result: &service.PaymentResult{ID: "pay-2", Status: "failed"}}
+	svc := service.NewOrderService(repo, fakeClient)
+	ctx := context.Background()
+
+	order, err := svc.CreateOrder(ctx, "client-1", "Товар", 100)
+	require.NoError(t, err)
+
+	result, err := svc.PayOrder(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusCreated, result.Status)
+}
+
+func TestPayOrder_OrderNotFound(t *testing.T) {
+	svc := newTestService()
+	ctx := context.Background()
+
+	_, err := svc.PayOrder(ctx, "не-существующий-id")
+	assert.ErrorIs(t, err, domain.ErrOrderNotFound)
+}
+
+func TestPayOrder_AlreadyPaidOrderRejected(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	fakeClient := &fakePaymentClient{result: &service.PaymentResult{ID: "pay-3", Status: "succeeded"}}
+	svc := service.NewOrderService(repo, fakeClient)
+	ctx := context.Background()
+
+	order, err := svc.CreateOrder(ctx, "client-1", "Товар", 100)
+	require.NoError(t, err)
+
+	_, err = svc.PayOrder(ctx, order.ID)
+	require.NoError(t, err)
+
+	_, err = svc.PayOrder(ctx, order.ID)
+	assert.ErrorIs(t, err, domain.ErrOrderNotPayable)
+}
+
+func TestPayOrder_PaymentServiceUnreachable(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	networkErr := errors.New("connection refused")
+	fakeClient := &fakePaymentClient{err: networkErr}
+	svc := service.NewOrderService(repo, fakeClient)
+	ctx := context.Background()
+
+	order, err := svc.CreateOrder(ctx, "client-1", "Товар", 100)
+	require.NoError(t, err)
+
+	_, err = svc.PayOrder(ctx, order.ID)
+	assert.ErrorIs(t, err, networkErr)
 }

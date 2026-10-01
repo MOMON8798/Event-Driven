@@ -24,7 +24,10 @@ type Order struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-var ErrOrderNotFound = errors.New("order not found")
+var (
+	ErrOrderNotFound   = errors.New("order not found")
+	ErrOrderNotPayable = errors.New("order is not in a payable state")
+)
 
 func (s Status) IsValid() bool {
 	switch s {

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,11 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type fakePaymentClient struct{}
+
+func (f *fakePaymentClient) CreatePayment(ctx context.Context, orderID string, amount float64) (*service.PaymentResult, error) {
+	return &service.PaymentResult{ID: "fake-payment-id", Status: "succeeded"}, nil
+}
+
 func newTestRouter() *gin.Engine {
-	gin.SetMode(gin.TestMode) // disables per-request logging in test output
+	gin.SetMode(gin.TestMode)
 
 	repo := repository.NewInMemoryRepository()
-	svc := service.NewOrderService(repo)
+	svc := service.NewOrderService(repo, &fakePaymentClient{})
 	h := handler.NewHandler(svc)
 
 	router := gin.New()
@@ -29,8 +36,6 @@ func newTestRouter() *gin.Engine {
 	return router
 }
 
-// doRequest - helper to avoid repeating the *http.Request +
-// httptest.NewRecorder setup in every test.
 func doRequest(t *testing.T, router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 

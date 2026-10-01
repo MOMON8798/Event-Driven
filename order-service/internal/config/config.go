@@ -3,14 +3,16 @@ package config
 import "os"
 
 type Config struct {
-	DBDSN    string
-	HTTPPort string
+	DBDSN             string
+	HTTPPort          string
+	PaymentServiceURL string
 }
 
 func Load() *Config {
 	return &Config{
-		DBDSN:    getEnv("DB_DSN", "postgres://user:password@localhost:5432/dbname?sslmode=disable"),
-		HTTPPort: getEnv("HTTP_PORT", "8080"),
+		DBDSN:             getEnv("DB_DSN", "postgres://user:password@localhost:5432/dbname?sslmode=disable"),
+		HTTPPort:          getEnv("HTTP_PORT", "8080"),
+		PaymentServiceURL: getEnv("PAYMENT_SERVICE_URL", "http://localhost:8081"),
 	}
 }
 

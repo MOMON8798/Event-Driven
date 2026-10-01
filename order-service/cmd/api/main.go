@@ -11,6 +11,7 @@ import (
 
 	"github.com/MOMON8798/Event-Driven.git/internal/config"
 	"github.com/MOMON8798/Event-Driven.git/internal/handler"
+	"github.com/MOMON8798/Event-Driven.git/internal/paymentclient"
 	"github.com/MOMON8798/Event-Driven.git/internal/repository"
 	"github.com/MOMON8798/Event-Driven.git/internal/service"
 	"github.com/gin-gonic/gin"
@@ -29,7 +30,8 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
-	svc := service.NewOrderService(repo)
+	paymentClient := paymentclient.New(cfg.PaymentServiceURL)
+	svc := service.NewOrderService(repo, paymentClient)
 	h := handler.NewHandler(svc)
 
 	router := gin.Default()

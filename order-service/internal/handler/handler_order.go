@@ -40,6 +40,7 @@ func (handler *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	orderGroup.PUT("/:id", handler.UpdateOrder)
 	orderGroup.DELETE("/:id", handler.DeleteOrder)
 	orderGroup.GET("/", handler.GetAllOrders)
+	orderGroup.POST("/:id/pay", handler.PayOrder)
 }
 
 func requestContext(ctx *gin.Context) (context.Context, context.CancelFunc) {
@@ -139,6 +140,28 @@ func (handler *Handler) DeleteOrder(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
+}
+
+func (handler *Handler) PayOrder(ctx *gin.Context) {
+	orderID := ctx.Param("id")
+
+	reqCtx, cancel := requestContext(ctx)
+	defer cancel()
+
+	order, err := handler.service.PayOrder(reqCtx, orderID)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrderNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+			return
+		}
+		if errors.Is(err, domain.ErrOrderNotPayable) {
+			ctx.JSON(http.StatusConflict, gin.H{"error": "Order is not in a payable state"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process payment"})
+		return
+	}
+	ctx.JSON(http.StatusOK, order)
 }
 
 func (handler *Handler) GetAllOrders(ctx *gin.Context) {

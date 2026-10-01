@@ -15,14 +15,25 @@ type OrderService interface {
 	UpdateOrder(ctx context.Context, order *domain.Order) error
 	DeleteOrder(ctx context.Context, id string) error
 	GetAllOrders(ctx context.Context) ([]*domain.Order, error)
+	PayOrder(ctx context.Context, id string) (*domain.Order, error)
+}
+
+type PaymentClient interface {
+	CreatePayment(ctx context.Context, orderID string, amount float64) (*PaymentResult, error)
 }
 
 type orderService struct {
-	repo repository.Repository
+	repo          repository.Repository
+	paymentClient PaymentClient
 }
 
-func NewOrderService(repo repository.Repository) OrderService {
-	return &orderService{repo: repo}
+type PaymentResult struct {
+	ID     string
+	Status string
+}
+
+func NewOrderService(repo repository.Repository, paymentClient PaymentClient) OrderService {
+	return &orderService{repo: repo, paymentClient: paymentClient}
 }
 
 func (s *orderService) GetOrderByID(ctx context.Context, id string) (*domain.Order, error) {
@@ -54,4 +65,29 @@ func (s *orderService) DeleteOrder(ctx context.Context, id string) error {
 
 func (s *orderService) GetAllOrders(ctx context.Context) ([]*domain.Order, error) {
 	return s.repo.GetAllOrders(ctx)
+}
+
+func (s *orderService) PayOrder(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.GetOrderByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if order.Status != domain.StatusCreated {
+		return nil, domain.ErrOrderNotPayable
+	}
+
+	result, err := s.paymentClient.CreatePayment(ctx, order.ID, order.Total)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status == "succeeded" {
+		order.Status = domain.StatusPaid
+		if err := s.repo.UpdateOrder(ctx, order); err != nil {
+			return nil, err
+		}
+	}
+
+	return order, nil
 }
